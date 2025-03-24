@@ -31,12 +31,20 @@ csv_data["longitude"] = csv_data["longitude"].apply(clean_numeric)
 # Drop rows with invalid coordinates
 csv_data = csv_data.dropna()
 
+# Filter invalid coordinates
+csv_data = csv_data[(csv_data["latitude"].between(-90, 90)) & (csv_data["longitude"].between(-180, 180))]
+
 # Load JSON sensor data
 with open(json_file, "r") as file:
     json_data = json.load(file)
+    cleaned_json_data = []
     for row in json_data:
         row["latitude"] = clean_numeric(row["latitude"])
         row["longitude"] = clean_numeric(row["longitude"])
+        if -90 <= row["latitude"] <= 90 and -180 <= row["longitude"] <= 180:
+            cleaned_json_data.append(row)
+# Replace with cleaned JSON data
+json_data = cleaned_json_data
 
 # Debugging: Print data types and sample data
 print(csv_data.dtypes)
@@ -53,20 +61,22 @@ def is_within_100m(lat1, lon1, lat2, lon2):
     return great_circle((lat1, lon1), (lat2, lon2)).meters <= 100
 
 # Find matching pairs of sensor readings
-matches = []
+matches = {}
 for _, csv_row in csv_data.iterrows():
-    csv_id = csv_row["id"]
+    csv_id = int(csv_row["id"])  # Ensure integer ID
     csv_lat, csv_lon = csv_row["latitude"], csv_row["longitude"]
     
     for json_row in json_data:
-        json_id = json_row["id"]
+        json_id = int(json_row["id"])  # Ensure integer ID
         json_lat, json_lon = json_row["latitude"], json_row["longitude"]
         
         if is_within_100m(csv_lat, csv_lon, json_lat, json_lon):
-            matches.append((csv_id, json_id))
+            matches[csv_id] = json_id
 
 # Save results
-output_file = "SensorOutput.csv"
-pd.DataFrame(matches, columns=["sensor1_id", "sensor2_id"]).to_csv(output_file, index=False)
+# Save results as JSON
+output_file = "SensorOutput.json"
+with open(output_file, "w") as json_out:
+    json.dump(matches, json_out, indent=4)
 
 print(f"Matched IDs saved to {output_file}")
